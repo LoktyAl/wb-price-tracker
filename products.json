@@ -1,6 +1,9 @@
 [
-      {
-              "nmId": 876691441,
-              "name": "HONOR Magic8 Pro NFC 12Gb 512Gb"
-      }
+  {"nmId": 876691441, "name": "HONOR Magic8 Pro NFC 12Gb 512Gb"},
+  {"nmId": 708111196, "name": "VIVO X300 PRO 16 512GB Global"},
+  {"nmId": 1015467575, "name": "VIVO X300 Ultra 16+512GB 5G"},
+  {"nmId": 719732307, "name": "OnePlus 15 16 512Gb EU Black"},
+  {"nmId": 776450549, "name": "OnePlus 15 16 512Gb EU Purple"},
+  {"nmId": 829914833, "name": "OnePlus 15 16 512GB Global CPH2747"},
+  {"nmId": 585924814, "name": "OnePlus 15 5G 16GB+512GB Global Beige eSIM"}
 ]
