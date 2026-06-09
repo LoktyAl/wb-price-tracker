@@ -4,7 +4,7 @@ import os
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-DROP_THRESHOLD = 0.25
+DROP_THRESHOLD = 0.20
 PRICES_FILE = "prices.json"
 
 HEADERS = {
