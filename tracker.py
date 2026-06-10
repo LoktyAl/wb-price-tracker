@@ -14,26 +14,43 @@ HEADERS = {
     "Referer": "https://www.wildberries.ru/",
 }
 
+
 def get_wb_price(nm_id):
-    url = f"https://card.wb.ru/cards/v1/detail?appType=1&curr=rub&dest=-1257786&nm={nm_id}"
+    url = (
+        "https://card.wb.ru/cards/v4/detail"
+        f"?appType=1&curr=rub&dest=-1257786&spp=30&nm={nm_id}"
+    )
     try:
         resp = requests.get(url, timeout=15, headers=HEADERS)
         print(f"WB API status {nm_id}: {resp.status_code}, len={len(resp.text)}")
         if resp.status_code != 200 or not resp.text.strip():
             print(f"Empty or bad response for {nm_id}")
             return None
-        products = resp.json().get("data", {}).get("products", [])
+        data = resp.json()
+        products = data.get("products") or data.get("data", {}).get("products", [])
         if not products:
             print(f"No products in response for {nm_id}")
             return None
         p = products[0]
+        price = None
+        for size in p.get("sizes", []):
+            sp = size.get("price") or {}
+            if sp.get("product"):
+                price = sp["product"] / 100
+                break
+        if price is None and p.get("salePriceU"):
+            price = p["salePriceU"] / 100
+        if price is None:
+            print(f"No price found for {nm_id}")
+            return None
         return {
-            "price": p.get("salePriceU", 0) / 100,
-            "name": p.get("name", "")
+            "price": price,
+            "name": p.get("name", ""),
         }
     except Exception as e:
         print(f"Error {nm_id}: {e}")
         return None
+
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -41,7 +58,7 @@ def send_telegram(message):
         resp = requests.post(url, data={
             "chat_id": TELEGRAM_CHAT_ID,
             "text": message,
-            "parse_mode": "HTML"
+            "parse_mode": "HTML",
         }, timeout=10)
         result = resp.json()
         if result.get("ok"):
@@ -51,15 +68,18 @@ def send_telegram(message):
     except Exception as e:
         print(f"Telegram exception: {e}")
 
+
 def load_prices():
     if os.path.exists(PRICES_FILE):
         with open(PRICES_FILE) as f:
             return json.load(f)
     return {}
 
+
 def save_prices(prices):
     with open(PRICES_FILE, "w") as f:
         json.dump(prices, f, ensure_ascii=False, indent=2)
+
 
 def main():
     with open("products.json") as f:
@@ -104,6 +124,7 @@ def main():
 
     save_prices(saved)
     print("Done.")
+
 
 if __name__ == "__main__":
     main()
