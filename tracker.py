@@ -49,10 +49,8 @@ def extract_price(p):
 def fetch_search(query):
     """Try multiple hosts/dests with backoff; return list of products or []."""
     session = requests.Session()
-    attempt = 0
     for host in SEARCH_HOSTS:
         for dest in DESTS:
-            attempt += 1
             url = (
                 host + "?appType=1&curr=rub&dest=" + dest +
                 "&spp=30&resultset=catalog&sort=popular&page=1&query=" +
@@ -80,7 +78,7 @@ def fetch_search(query):
     return []
 
 
-def scan_query(query, top, min_price):
+def scan_query(query, top, min_price, label=""):
     """Scan a WB search query and return list of {nmId, name, price}."""
     products = fetch_search(query)
     results = []
@@ -91,9 +89,11 @@ def scan_query(query, top, min_price):
             continue
         if min_price and price < min_price:
             continue
+        raw_name = p.get("name", "")
+        name = f"{label} \u2014 {raw_name}" if label else raw_name
         results.append({
             "nmId": nm_id,
-            "name": p.get("name", ""),
+            "name": name,
             "price": price,
         })
     return results
@@ -159,7 +159,12 @@ def main():
 
     found = {}
     for q in config.get("scan", []):
-        items = scan_query(q.get("query", ""), q.get("top", 30), q.get("min_price", 0))
+        items = scan_query(
+            q.get("query", ""),
+            q.get("top", 5),
+            q.get("min_price", 0),
+            q.get("label", ""),
+        )
         for it in items:
             found[str(it["nmId"])] = it
 
