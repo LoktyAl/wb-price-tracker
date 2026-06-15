@@ -1,6 +1,8 @@
 import requests
 import json
 import os
+import time
+import random
 from datetime import datetime, timezone
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -9,12 +11,25 @@ PRICES_FILE = "prices.json"
 PRODUCTS_FILE = "products.json"
 CHANGE_THRESHOLD = 0.10  # notify only on >=10% change
 
+SEARCH_HOSTS = [
+    "https://search.wb.ru/exactmatch/ru/common/v5/search",
+    "https://search.wb.ru/exactmatch/ru/common/v4/search",
+    "https://u-search.wb.ru/exactmatch/ru/common/v5/search",
+    "https://recom.wb.ru/exactmatch/ru/common/v5/search",
+]
+DESTS = ["-1257786", "-1255987", "12358062"]
+MAX_RETRIES = 4
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
+    "Accept": "*/*",
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
     "Origin": "https://www.wildberries.ru",
     "Referer": "https://www.wildberries.ru/",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "cross-site",
+    "x-requested-with": "XMLHttpRequest",
 }
 
 
@@ -31,36 +46,56 @@ def extract_price(p):
     return None
 
 
+def fetch_search(query):
+    """Try multiple hosts/dests with backoff; return list of products or []."""
+    session = requests.Session()
+    attempt = 0
+    for host in SEARCH_HOSTS:
+        for dest in DESTS:
+            attempt += 1
+            url = (
+                host + "?appType=1&curr=rub&dest=" + dest +
+                "&spp=30&resultset=catalog&sort=popular&page=1&query=" +
+                requests.utils.quote(query)
+            )
+            for retry in range(MAX_RETRIES):
+                try:
+                    resp = session.get(url, timeout=20, headers=HEADERS)
+                    print(f"WB search '{query}' [{host.split('//')[1].split('.')[0]}/dest{dest}]: status {resp.status_code}, len={len(resp.text)}")
+                    if resp.status_code == 429:
+                        wait = (2 ** retry) + random.uniform(0, 1.5)
+                        print(f"  429, backoff {wait:.1f}s")
+                        time.sleep(wait)
+                        continue
+                    if resp.status_code != 200 or not resp.text.strip():
+                        break
+                    data = resp.json()
+                    products = data.get("data", {}).get("products", []) or data.get("products", [])
+                    if products:
+                        return products
+                    break
+                except Exception as e:
+                    print(f"  error: {e}")
+                    time.sleep(1 + retry)
+    return []
+
+
 def scan_query(query, top, min_price):
     """Scan a WB search query and return list of {nmId, name, price}."""
-    url = (
-        "https://search.wb.ru/exactmatch/ru/common/v5/search"
-        "?appType=1&curr=rub&dest=-1257786&spp=30&resultset=catalog"
-        "&sort=popular&page=1&query=" + requests.utils.quote(query)
-    )
+    products = fetch_search(query)
     results = []
-    try:
-        resp = requests.get(url, timeout=20, headers=HEADERS)
-        print(f"WB search '{query}': status {resp.status_code}, len={len(resp.text)}")
-        if resp.status_code != 200 or not resp.text.strip():
-            print(f"Empty or bad response for query '{query}'")
-            return results
-        data = resp.json()
-        products = data.get("data", {}).get("products", []) or data.get("products", [])
-        for p in products[:top]:
-            nm_id = p.get("id")
-            price = extract_price(p)
-            if nm_id is None or price is None:
-                continue
-            if min_price and price < min_price:
-                continue
-            results.append({
-                "nmId": nm_id,
-                "name": p.get("name", ""),
-                "price": price,
-            })
-    except Exception as e:
-        print(f"Error scanning '{query}': {e}")
+    for p in products[:top]:
+        nm_id = p.get("id")
+        price = extract_price(p)
+        if nm_id is None or price is None:
+            continue
+        if min_price and price < min_price:
+            continue
+        results.append({
+            "nmId": nm_id,
+            "name": p.get("name", ""),
+            "price": price,
+        })
     return results
 
 
@@ -105,7 +140,6 @@ def load_history():
             if isinstance(val, list):
                 history[nm_id] = val
             else:
-                # migrate old format {nmId: price} -> [{date, price}]
                 history[nm_id] = [{"date": "migrated", "price": val}]
         return history
     return {}
