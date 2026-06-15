@@ -20,6 +20,11 @@ SEARCH_HOSTS = [
 ]
 DESTS = ["-1257786", "-1255987", "12358062"]
 MAX_RETRIES = 4
+STOP_WORDS = [
+    "\u043d\u0430\u0431\u043e\u0440", "\u043a\u043e\u043c\u043f\u043b\u0435\u043a\u0442", "\u0447\u0435\u0445\u043e\u043b", "\u0444\u043e\u0442\u043e\u0433\u0440\u0430\u0444", "\u0441\u0442\u0435\u043a\u043b\u043e",
+    "\u0430\u043a\u0441\u0435\u0441\u0441\u0443\u0430\u0440", "\u0437\u0430\u0449\u0438\u0442", "\u043f\u043b\u0451\u043d\u043a", "\u043f\u043b\u0435\u043d\u043a", "\u0431\u0430\u043c\u043f\u0435\u0440",
+    "\u0437\u0430\u0440\u044f\u0434", "\u043a\u0430\u0431\u0435\u043b", "\u0434\u043b\u044f \u0441\u043c\u0430\u0440\u0442\u0444\u043e\u043d", "\u043a \u0441\u043c\u0430\u0440\u0442\u0444\u043e\u043d",
+]
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -88,6 +93,9 @@ def scan_query(query, top, min_price, label=""):
         if min_price and price < min_price:
             continue
         raw_name = p.get("name", "")
+        low = raw_name.lower()
+        if any(w in low for w in STOP_WORDS):
+            continue
         name = f"{label} \u2014 {raw_name}" if label else raw_name
         results.append({"nmId": nm_id, "name": name, "price": price})
     return results
