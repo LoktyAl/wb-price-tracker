@@ -1,11 +1,13 @@
 import requests
 import json
 import os
+from datetime import datetime, timezone
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 PRICES_FILE = "prices.json"
-STRONG_DROP_THRESHOLD = 0.20
+PRODUCTS_FILE = "products.json"
+CHANGE_THRESHOLD = 0.10  # notify only on >=10% change
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -16,38 +18,50 @@ HEADERS = {
 }
 
 
-def get_wb_price(nm_id):
+def extract_price(p):
+    """Return product price in rubles from a WB product object, or None."""
+    for size in p.get("sizes", []):
+        sp = size.get("price") or {}
+        if sp.get("product"):
+            return sp["product"] / 100
+    if p.get("salePriceU"):
+        return p["salePriceU"] / 100
+    if p.get("priceU"):
+        return p["priceU"] / 100
+    return None
+
+
+def scan_query(query, top, min_price):
+    """Scan a WB search query and return list of {nmId, name, price}."""
     url = (
-        "https://card.wb.ru/cards/v4/detail"
-        f"?appType=1&curr=rub&dest=-1257786&spp=30&nm={nm_id}"
+        "https://search.wb.ru/exactmatch/ru/common/v5/search"
+        "?appType=1&curr=rub&dest=-1257786&spp=30&resultset=catalog"
+        "&sort=popular&page=1&query=" + requests.utils.quote(query)
     )
+    results = []
     try:
-        resp = requests.get(url, timeout=15, headers=HEADERS)
-        print(f"WB API status {nm_id}: {resp.status_code}, len={len(resp.text)}")
+        resp = requests.get(url, timeout=20, headers=HEADERS)
+        print(f"WB search '{query}': status {resp.status_code}, len={len(resp.text)}")
         if resp.status_code != 200 or not resp.text.strip():
-            print(f"Empty or bad response for {nm_id}")
-            return None
+            print(f"Empty or bad response for query '{query}'")
+            return results
         data = resp.json()
-        products = data.get("products") or data.get("data", {}).get("products", [])
-        if not products:
-            print(f"No products in response for {nm_id}")
-            return None
-        p = products[0]
-        price = None
-        for size in p.get("sizes", []):
-            sp = size.get("price") or {}
-            if sp.get("product"):
-                price = sp["product"] / 100
-                break
-        if price is None and p.get("salePriceU"):
-            price = p["salePriceU"] / 100
-        if price is None:
-            print(f"No price found for {nm_id}")
-            return None
-        return {"price": price, "name": p.get("name", "")}
+        products = data.get("data", {}).get("products", []) or data.get("products", [])
+        for p in products[:top]:
+            nm_id = p.get("id")
+            price = extract_price(p)
+            if nm_id is None or price is None:
+                continue
+            if min_price and price < min_price:
+                continue
+            results.append({
+                "nmId": nm_id,
+                "name": p.get("name", ""),
+                "price": price,
+            })
     except Exception as e:
-        print(f"Error {nm_id}: {e}")
-        return None
+        print(f"Error scanning '{query}': {e}")
+    return results
 
 
 def send_telegram(message):
@@ -57,6 +71,7 @@ def send_telegram(message):
             "chat_id": TELEGRAM_CHAT_ID,
             "text": message,
             "parse_mode": "HTML",
+            "disable_web_page_preview": "true",
         }, timeout=10)
         result = resp.json()
         if result.get("ok"):
@@ -71,19 +86,6 @@ def build_message(name, old_price, current_price, link):
     diff = current_price - old_price
     pct = diff / old_price * 100
     sign = "+" if diff > 0 else ""
-    if pct <= -STRONG_DROP_THRESHOLD * 100:
-        line = "\u2501" * 12
-        return (
-            f"\U0001f525\U0001f525\U0001f525 <b>\u0421\u0418\u041b\u042c\u041d\u041e\u0415 \u0421\u041d\u0418\u0416\u0415\u041d\u0418\u0415 \u0426\u0415\u041d\u042b!</b> \U0001f525\U0001f525\U0001f525\n"
-            f"{line}\n"
-            f"\U0001f4e6 <b>{name}</b>\n\n"
-            f"\u274c \u0411\u044b\u043b\u043e: <s>{old_price:,.0f} \u20bd</s>\n"
-            f"\U0001f7e2 \u0421\u0442\u0430\u043b\u043e: <b>{current_price:,.0f} \u20bd</b>\n"
-            f"\U0001f4b8 \u0412\u042b\u0413\u041e\u0414\u0410: <b>{-diff:,.0f} \u20bd ({pct:.1f}%)</b>\n"
-            f"{line}\n"
-            f"\u26a1\ufe0f <b>\u0426\u0435\u043d\u0430 \u0443\u043f\u0430\u043b\u0430 \u0431\u043e\u043b\u044c\u0448\u0435 \u0447\u0435\u043c \u043d\u0430 20%!</b>\n\n"
-            f"<a href=\"{link}\">\U0001f6d2 \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043d\u0430 Wildberries</a>"
-        )
     arrow = "\U0001f4c9" if diff < 0 else "\U0001f4c8"
     return (
         f"{arrow} <b>{name}</b>\n\n"
@@ -94,53 +96,62 @@ def build_message(name, old_price, current_price, link):
     )
 
 
-def load_prices():
+def load_history():
     if os.path.exists(PRICES_FILE):
         with open(PRICES_FILE) as f:
-            return json.load(f)
+            raw = json.load(f)
+        history = {}
+        for nm_id, val in raw.items():
+            if isinstance(val, list):
+                history[nm_id] = val
+            else:
+                # migrate old format {nmId: price} -> [{date, price}]
+                history[nm_id] = [{"date": "migrated", "price": val}]
+        return history
     return {}
 
 
-def save_prices(prices):
+def save_history(history):
     with open(PRICES_FILE, "w") as f:
-        json.dump(prices, f, ensure_ascii=False, indent=2)
+        json.dump(history, f, ensure_ascii=False, indent=2)
 
 
 def main():
-    with open("products.json") as f:
-        products = json.load(f)
+    with open(PRODUCTS_FILE) as f:
+        config = json.load(f)
 
-    saved = load_prices()
+    history = load_history()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    for item in products:
-        nm_id = str(item["nmId"])
-        data = get_wb_price(item["nmId"])
-        if not data:
-            print(f"No data for {item['nmId']}")
-            continue
+    found = {}
+    for q in config.get("scan", []):
+        items = scan_query(q.get("query", ""), q.get("top", 30), q.get("min_price", 0))
+        for it in items:
+            found[str(it["nmId"])] = it
 
-        current_price = data["price"]
-        name = data["name"] or item["name"]
-        link = f"https://www.wildberries.ru/catalog/{item['nmId']}/detail.aspx"
-        print(f"{name}: {current_price} rub")
+    print(f"Found {len(found)} products across all queries")
 
-        if nm_id in saved:
-            old_price = saved[nm_id]
-            if old_price > 0 and current_price != old_price:
-                diff = current_price - old_price
-                pct = diff / old_price * 100
-                sign = "+" if diff > 0 else ""
-                send_telegram(build_message(name, old_price, current_price, link))
-                strong = " [STRONG DROP]" if pct <= -STRONG_DROP_THRESHOLD * 100 else ""
-                print(f"  Price changed: {old_price} -> {current_price} ({sign}{pct:.1f}%){strong}")
+    for nm_id, it in found.items():
+        current_price = it["price"]
+        name = it["name"]
+        link = f"https://www.wildberries.ru/catalog/{nm_id}/detail.aspx"
+        series = history.get(nm_id, [])
+        last_price = series[-1]["price"] if series else None
+
+        if last_price and last_price > 0:
+            change = abs(current_price - last_price) / last_price
+            if change >= CHANGE_THRESHOLD:
+                send_telegram(build_message(name, last_price, current_price, link))
+                print(f"  ALERT {name}: {last_price} -> {current_price} ({change*100:.1f}%)")
             else:
-                print(f"  No change: {current_price:.0f} rub")
+                print(f"  {name}: {current_price:.0f} rub (change {change*100:.1f}%)")
         else:
-            print(f"  Added to tracking at {current_price:.0f} rub")
+            print(f"  Added to tracking {name}: {current_price:.0f} rub")
 
-        saved[nm_id] = current_price
+        series.append({"date": now, "price": current_price})
+        history[nm_id] = series
 
-    save_prices(saved)
+    save_history(history)
     print("Done.")
 
 
