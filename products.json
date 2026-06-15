@@ -1,9 +1,70 @@
 {
-    "scan": [
-          {
-                  "query": "смартфон",
-                  "top": 30,
-                  "min_price": 5000
-          }
-    ]
+  "scan": [
+    {
+      "label": "Samsung Galaxy S26",
+      "query": "Samsung Galaxy S26",
+      "top": 5,
+      "min_price": 50000
+    },
+    {
+      "label": "Samsung Galaxy S26 Ultra",
+      "query": "Samsung Galaxy S26 Ultra",
+      "top": 5,
+      "min_price": 80000
+    },
+    {
+      "label": "iPhone 17",
+      "query": "iPhone 17 128",
+      "top": 5,
+      "min_price": 60000
+    },
+    {
+      "label": "iPhone Air",
+      "query": "iPhone Air",
+      "top": 5,
+      "min_price": 70000
+    },
+    {
+      "label": "iPhone 17 Pro",
+      "query": "iPhone 17 Pro 256",
+      "top": 5,
+      "min_price": 90000
+    },
+    {
+      "label": "iPhone 17 Pro Max",
+      "query": "iPhone 17 Pro Max 256",
+      "top": 5,
+      "min_price": 100000
+    },
+    {
+      "label": "OnePlus 15",
+      "query": "OnePlus 15 16 512",
+      "top": 5,
+      "min_price": 50000
+    },
+    {
+      "label": "OPPO Find X9 Pro",
+      "query": "OPPO Find X9 Pro",
+      "top": 5,
+      "min_price": 60000
+    },
+    {
+      "label": "Vivo X300 Pro",
+      "query": "Vivo X300 Pro",
+      "top": 5,
+      "min_price": 60000
+    },
+    {
+      "label": "Vivo X300 Ultra",
+      "query": "Vivo X300 Ultra",
+      "top": 5,
+      "min_price": 70000
+    },
+    {
+      "label": "OPPO Find X9 Ultra",
+      "query": "OPPO Find X9 Ultra",
+      "top": 5,
+      "min_price": 70000
+    }
+  ]
 }
