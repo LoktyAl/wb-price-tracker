@@ -1,4 +1,4 @@
-"""One-off TEST script: scan top smartphones and send them to Telegram
+"""One-off TEST script: scan configured models and send them to Telegram
 with a FAKE price change. Does NOT touch prices.json. Run manually only.
 """
 import requests
@@ -10,7 +10,7 @@ import random
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 PRODUCTS_FILE = "products.json"
-TEST_LIMIT = 10  # how many products to send as a test
+TEST_LIMIT = 40  # max products to send as a test
 
 SEARCH_HOSTS = [
     "https://search.wb.ru/exactmatch/ru/common/v5/search",
@@ -77,7 +77,7 @@ def fetch_search(query):
     return []
 
 
-def scan_query(query, top, min_price):
+def scan_query(query, top, min_price, label=""):
     products = fetch_search(query)
     results = []
     for p in products[:top]:
@@ -87,7 +87,9 @@ def scan_query(query, top, min_price):
             continue
         if min_price and price < min_price:
             continue
-        results.append({"nmId": nm_id, "name": p.get("name", ""), "price": price})
+        raw_name = p.get("name", "")
+        name = f"{label} \u2014 {raw_name}" if label else raw_name
+        results.append({"nmId": nm_id, "name": name, "price": price})
     return results
 
 
@@ -130,11 +132,11 @@ def main():
 
     found = {}
     for q in config.get("scan", []):
-        items = scan_query(q.get("query", ""), q.get("top", 30), q.get("min_price", 0))
+        items = scan_query(q.get("query", ""), q.get("top", 5), q.get("min_price", 0), q.get("label", ""))
         for it in items:
             found[str(it["nmId"])] = it
 
-    print(f"Found {len(found)} products; sending first {TEST_LIMIT} as TEST")
+    print(f"Found {len(found)} products; sending up to {TEST_LIMIT} as TEST")
 
     sent = 0
     for nm_id, it in found.items():
@@ -143,12 +145,11 @@ def main():
         current_price = it["price"]
         name = it["name"]
         link = f"https://www.wildberries.ru/catalog/{nm_id}/detail.aspx"
-        # fake "old" price = +10% so it looks like a 10% drop
         old_price = round(current_price * 1.10, 0)
         send_telegram(build_message(name, old_price, current_price, link))
         print(f"  TEST sent {name}: {old_price} -> {current_price}")
         sent += 1
-        time.sleep(0.5)
+        time.sleep(0.4)
 
     print("Test done.")
 
