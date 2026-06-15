@@ -83,7 +83,7 @@ def fetch_search(query):
     return []
 
 
-def scan_query(query, top, min_price, label=""):
+def scan_query(query, top, min_price, label="", must_include=""):
     """Scan a WB search query and return list of {nmId, name, price}."""
     products = fetch_search(query)
     results = []
@@ -97,6 +97,8 @@ def scan_query(query, top, min_price, label=""):
         raw_name = p.get("name", "")
         low = raw_name.lower()
         if any(w in low for w in STOP_WORDS):
+            continue
+        if must_include and must_include.lower() not in low:
             continue
         name = f"{label} \u2014 {raw_name}" if label else raw_name
         results.append({
@@ -172,6 +174,7 @@ def main():
             q.get("top", 5),
             q.get("min_price", 0),
             q.get("label", ""),
+            q.get("must_include", ""),
         )
         for it in items:
             found[str(it["nmId"])] = it
