@@ -82,7 +82,7 @@ def fetch_search(query):
     return []
 
 
-def scan_query(query, top, min_price, label=""):
+def scan_query(query, top, min_price, label="", must_include=""):
     products = fetch_search(query)
     results = []
     for p in products[:top]:
@@ -95,6 +95,8 @@ def scan_query(query, top, min_price, label=""):
         raw_name = p.get("name", "")
         low = raw_name.lower()
         if any(w in low for w in STOP_WORDS):
+            continue
+        if must_include and must_include.lower() not in low:
             continue
         name = f"{label} \u2014 {raw_name}" if label else raw_name
         results.append({"nmId": nm_id, "name": name, "price": price})
@@ -140,7 +142,7 @@ def main():
 
     found = {}
     for q in config.get("scan", []):
-        items = scan_query(q.get("query", ""), q.get("top", 5), q.get("min_price", 0), q.get("label", ""))
+        items = scan_query(q.get("query", ""), q.get("top", 5), q.get("min_price", 0), q.get("label", ""), q.get("must_include", ""))
         for it in items:
             found[str(it["nmId"])] = it
 
