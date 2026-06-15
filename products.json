@@ -3,66 +3,77 @@
     {
       "label": "Samsung Galaxy S26",
       "query": "Samsung Galaxy S26",
+      "must_include": "s26",
       "top": 5,
       "min_price": 50000
     },
     {
       "label": "Samsung Galaxy S26 Ultra",
       "query": "Samsung Galaxy S26 Ultra",
+      "must_include": "s26 ultra",
       "top": 5,
       "min_price": 80000
     },
     {
       "label": "iPhone 17",
       "query": "iPhone 17 128",
+      "must_include": "iphone 17",
       "top": 5,
       "min_price": 60000
     },
     {
       "label": "iPhone Air",
       "query": "iPhone Air",
+      "must_include": "air",
       "top": 5,
       "min_price": 70000
     },
     {
       "label": "iPhone 17 Pro",
       "query": "iPhone 17 Pro 256",
+      "must_include": "17 pro",
       "top": 5,
       "min_price": 90000
     },
     {
       "label": "iPhone 17 Pro Max",
       "query": "iPhone 17 Pro Max 256",
+      "must_include": "pro max",
       "top": 5,
       "min_price": 100000
     },
     {
       "label": "OnePlus 15",
       "query": "OnePlus 15 16 512",
+      "must_include": "plus 15",
       "top": 5,
       "min_price": 50000
     },
     {
       "label": "OPPO Find X9 Pro",
       "query": "OPPO Find X9 Pro",
+      "must_include": "x9 pro",
       "top": 5,
       "min_price": 60000
     },
     {
       "label": "Vivo X300 Pro",
       "query": "Vivo X300 Pro",
+      "must_include": "x300 pro",
       "top": 5,
       "min_price": 60000
     },
     {
       "label": "Vivo X300 Ultra",
       "query": "Vivo X300 Ultra",
+      "must_include": "x300 ultra",
       "top": 5,
       "min_price": 70000
     },
     {
       "label": "OPPO Find X9 Ultra",
       "query": "OPPO Find X9 Ultra",
+      "must_include": "x9 ultra",
       "top": 5,
       "min_price": 70000
     }
