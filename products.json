@@ -1,81 +1,156 @@
 {
-  "scan": [
+  "config": {
+    "eur_rate": 105,
+    "duty_free_eur": 200,
+    "duty_rate": 0.15,
+    "wb_card_discount": 0.06
+  },
+  "models": [
     {
-      "label": "Samsung Galaxy S26",
-      "query": "Samsung Galaxy S26",
-      "must_include": "s26",
-      "top": 5,
+      "label": "Samsung Galaxy S26 256ГБ",
+      "query": "Samsung Galaxy S26 256",
+      "must_include": [
+        "s26"
+      ],
+      "must_exclude": [
+        "ultra",
+        "plus"
+      ],
+      "memory": 256,
+      "target": 43000,
+      "min_price": 25000
+    },
+    {
+      "label": "Samsung Galaxy S26 512ГБ",
+      "query": "Samsung Galaxy S26 512",
+      "must_include": [
+        "s26"
+      ],
+      "must_exclude": [
+        "ultra",
+        "plus"
+      ],
+      "memory": 512,
+      "target": 53000,
+      "min_price": 30000
+    },
+    {
+      "label": "Samsung Galaxy S26 Ultra 256ГБ",
+      "query": "Samsung Galaxy S26 Ultra 256",
+      "must_include": [
+        "s26 ultra"
+      ],
+      "must_exclude": [],
+      "memory": 256,
+      "target": 68000,
+      "min_price": 45000
+    },
+    {
+      "label": "Samsung Galaxy S26 Ultra 512ГБ",
+      "query": "Samsung Galaxy S26 Ultra 512",
+      "must_include": [
+        "s26 ultra"
+      ],
+      "must_exclude": [],
+      "memory": 512,
+      "target": 78000,
       "min_price": 50000
     },
     {
-      "label": "Samsung Galaxy S26 Ultra",
-      "query": "Samsung Galaxy S26 Ultra",
-      "must_include": "s26 ultra",
-      "top": 5,
-      "min_price": 80000
-    },
-    {
       "label": "iPhone 17",
-      "query": "iPhone 17 128",
-      "must_include": "iphone 17",
-      "top": 5,
-      "min_price": 60000
-    },
-    {
-      "label": "iPhone Air",
-      "query": "iPhone Air",
-      "must_include": "air",
-      "top": 5,
-      "min_price": 70000
+      "query": "iPhone 17 256",
+      "must_include": [
+        "iphone 17"
+      ],
+      "must_exclude": [
+        "pro",
+        "air",
+        "plus"
+      ],
+      "memory": 0,
+      "target": 55000,
+      "min_price": 35000
     },
     {
       "label": "iPhone 17 Pro",
       "query": "iPhone 17 Pro 256",
-      "must_include": "17 pro",
-      "top": 5,
-      "min_price": 90000
+      "must_include": [
+        "17 pro"
+      ],
+      "must_exclude": [
+        "max"
+      ],
+      "memory": 0,
+      "target": 73000,
+      "min_price": 50000
     },
     {
       "label": "iPhone 17 Pro Max",
       "query": "iPhone 17 Pro Max 256",
-      "must_include": "pro max",
-      "top": 5,
-      "min_price": 100000
+      "must_include": [
+        "pro max"
+      ],
+      "must_exclude": [],
+      "memory": 0,
+      "target": 78000,
+      "min_price": 55000
     },
     {
-      "label": "OnePlus 15",
+      "label": "OnePlus 15 512ГБ",
       "query": "OnePlus 15 16 512",
-      "must_include": "plus 15",
-      "top": 5,
-      "min_price": 50000
+      "must_include": [
+        "plus 15"
+      ],
+      "must_exclude": [],
+      "memory": 512,
+      "target": 55000,
+      "min_price": 30000
     },
     {
-      "label": "OPPO Find X9 Pro",
-      "query": "OPPO Find X9 Pro",
-      "must_include": "x9 pro",
-      "top": 5,
-      "min_price": 60000
+      "label": "OPPO Find X9 Pro 512ГБ",
+      "query": "OPPO Find X9 Pro 512",
+      "must_include": [
+        "x9 pro"
+      ],
+      "must_exclude": [
+        "ultra"
+      ],
+      "memory": 512,
+      "target": 60000,
+      "min_price": 35000
     },
     {
-      "label": "Vivo X300 Pro",
-      "query": "Vivo X300 Pro",
-      "must_include": "x300 pro",
-      "top": 5,
-      "min_price": 60000
+      "label": "OPPO Find X9 Ultra 512ГБ",
+      "query": "OPPO Find X9 Ultra 512",
+      "must_include": [
+        "x9 ultra"
+      ],
+      "must_exclude": [],
+      "memory": 512,
+      "target": 80000,
+      "min_price": 45000
     },
     {
-      "label": "Vivo X300 Ultra",
-      "query": "Vivo X300 Ultra",
-      "must_include": "x300 ultra",
-      "top": 5,
-      "min_price": 70000
+      "label": "Vivo X300 Ultra 512ГБ",
+      "query": "Vivo X300 Ultra 512",
+      "must_include": [
+        "x300 ultra"
+      ],
+      "must_exclude": [],
+      "memory": 512,
+      "target": 68000,
+      "min_price": 40000
     },
     {
-      "label": "OPPO Find X9 Ultra",
-      "query": "OPPO Find X9 Ultra",
-      "must_include": "x9 ultra",
-      "top": 5,
-      "min_price": 70000
+      "label": "Honor Magic 8 Pro 512ГБ",
+      "query": "Honor Magic 8 Pro 512",
+      "must_include": [
+        "magic 8 pro"
+      ],
+      "must_exclude": [],
+      "memory": 512,
+      "target": 55000,
+      "min_price": 30000
     }
   ]
 }
