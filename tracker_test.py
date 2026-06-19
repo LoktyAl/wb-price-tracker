@@ -3,20 +3,22 @@ import json
 import os
 import time
 import random
+import sys
 from urllib.parse import quote
+
+def log(*a):
+    print(*a, flush=True)
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 PRODUCTS_FILE = "products.json"
 
-# ---- Junk / accessory stop-words (item is NOT the phone itself) ----
 STOP_WORDS = [
     "\u043d\u0430\u0431\u043e\u0440", "\u043a\u043e\u043c\u043f\u043b\u0435\u043a\u0442", "\u0447\u0435\u0445\u043e\u043b", "\u0444\u043e\u0442\u043e\u0433\u0440\u0430\u0444", "\u0441\u0442\u0435\u043a\u043b\u043e",
     "\u0430\u043a\u0441\u0435\u0441\u0441\u0443\u0430\u0440", "\u0437\u0430\u0449\u0438\u0442", "\u043f\u043b\u0451\u043d\u043a", "\u043f\u043b\u0435\u043d\u043a", "\u0431\u0430\u043c\u043f\u0435\u0440",
     "\u0437\u0430\u0440\u044f\u0434", "\u043a\u0430\u0431\u0435\u043b", "\u0434\u043b\u044f \u0441\u043c\u0430\u0440\u0442\u0444\u043e\u043d", "\u043a \u0441\u043c\u0430\u0440\u0442\u0444\u043e\u043d",
 ]
 
-# ---- Chinese-version markers (we only want GLOBAL versions) ----
 CN_MARKERS = [
     "chinese version", "china version", "\u043a\u0438\u0442\u0430\u0439\u0441\u043a\u0430\u044f \u0432\u0435\u0440\u0441", "\u043a\u0438\u0442\u0430\u0439\u0441\u043a\u0430\u044f \u043f\u0440\u043e\u0448\u0438\u0432",
     "global rom", "\u0433\u043b\u043e\u0431\u0430\u043b \u0440\u043e\u043c", " cn ", " cn,", "(cn)", " ct ", "(ct)", " ct,",
@@ -46,6 +48,10 @@ WB_SEARCH_HOSTS = [
 WB_DESTS = ["-1257786", "-1255987"]
 MAX_RETRIES = 3
 
+OZON_TIMEOUT = 8
+OZON_MAX_PRODUCTS = 3
+OZON = {"enabled": True, "fails": 0}
+
 
 def is_chinese_version(name):
     low = " " + name.lower() + " "
@@ -56,7 +62,6 @@ def is_junk(name):
     return any(w in low for w in STOP_WORDS)
 
 def memory_ok(name, want_gb):
-    """If want_gb is 0, accept any. Otherwise require that memory in name."""
     if not want_gb:
         return True
     low = name.lower().replace(" ", "")
@@ -69,21 +74,20 @@ def memory_ok(name, want_gb):
 def passes_filters(name, model):
     low = name.lower()
     if is_junk(name):
-        return False, "junk"
+        return False
     if is_chinese_version(name):
-        return False, "chinese"
+        return False
     for inc in model.get("must_include", []):
         if inc.lower() not in low:
-            return False, "no-include"
+            return False
     for exc in model.get("must_exclude", []):
         if exc.lower() in low:
-            return False, "excluded"
+            return False
     if not memory_ok(name, model.get("memory", 0)):
-        return False, "memory"
-    return True, "ok"
+        return False
+    return True
 
 def est_duty(price_rub, cfg):
-    """Estimate cross-border customs duty (RU rules): 15% over 200 EUR."""
     threshold = cfg.get("duty_free_eur", 200) * cfg.get("eur_rate", 105)
     if price_rub <= threshold:
         return 0
@@ -99,8 +103,8 @@ def wb_search(query):
                    "&spp=30&resultset=catalog&sort=popular&page=1&query=" + quote(query))
             for retry in range(MAX_RETRIES):
                 try:
-                    r = session.get(url, timeout=20, headers=HEADERS_WB)
-                    print("WB '" + query + "' status " + str(r.status_code) + " len " + str(len(r.text)))
+                    r = session.get(url, timeout=15, headers=HEADERS_WB)
+                    log("WB '" + query + "' status " + str(r.status_code))
                     if r.status_code == 429:
                         time.sleep((2 ** retry) + random.uniform(0, 1.0))
                         continue
@@ -112,7 +116,7 @@ def wb_search(query):
                         return prods
                     break
                 except Exception as e:
-                    print("  WB err: " + str(e))
+                    log("  WB err: " + str(e))
                     time.sleep(1 + retry)
     return []
 
@@ -131,7 +135,7 @@ def wb_is_foreign(p, name):
     low = name.lower()
     if "\u043d\u0430\u0445\u043e\u0434\u043a" in low or "\u0438\u0437 \u043a\u0438\u0442\u0430\u044f" in low or "aliexpress" in low:
         return True
-    if p.get("dtype") == 4 or p.get("dist") == "foreign":
+    if p.get("dtype") == 4:
         return True
     return False
 
@@ -140,8 +144,7 @@ def wb_scan(model, cfg):
     disc = cfg.get("wb_card_discount", 0.06)
     for p in wb_search(model["query"])[:15]:
         name = p.get("name", "")
-        ok, why = passes_filters(name, model)
-        if not ok:
+        if not passes_filters(name, model):
             continue
         base = wb_price(p)
         if base is None or base < model.get("min_price", 0):
@@ -150,8 +153,7 @@ def wb_scan(model, cfg):
         foreign = wb_is_foreign(p, name)
         duty = est_duty(card, cfg) if foreign else 0
         out.append({
-            "market": "WB",
-            "name": name,
+            "market": "WB", "name": name,
             "url": "https://www.wildberries.ru/catalog/" + str(p.get("id")) + "/detail.aspx",
             "base": base, "card": card, "duty": duty,
             "duty_est": foreign, "total": card + duty,
@@ -161,104 +163,112 @@ def wb_scan(model, cfg):
 
 # ----------------------------- Ozon -----------------------------
 
-def ozon_search_ids(query):
-    """Return list of product ids from Ozon search via composer-api page JSON."""
-    url = "https://www.ozon.ru/api/composer-api.bx/page/json/v2?url=" + quote("/search/?text=" + query, safe="")
+def ozon_get(path):
+    """Single GET to Ozon composer API with short timeout and kill-switch."""
+    if not OZON["enabled"]:
+        return None
+    url = "https://www.ozon.ru/api/composer-api.bx/page/json/v2?url=" + quote(path, safe="")
     try:
-        r = requests.get(url, timeout=25, headers=HEADERS_OZON)
-        print("OZON search '" + query + "' status " + str(r.status_code) + " len " + str(len(r.text)))
+        r = requests.get(url, timeout=OZON_TIMEOUT, headers=HEADERS_OZON)
         if r.status_code != 200:
-            return []
-        data = r.json()
-        ws = data.get("widgetStates", {})
-        ids = []
-        for k, v in ws.items():
-            if not k.startswith("tileGrid"):
-                continue
-            try:
-                tile = json.loads(v)
-            except Exception:
-                continue
-            for item in tile.get("items", []):
-                link = item.get("action", {}).get("link", "") if isinstance(item.get("action"), dict) else ""
-                if not link:
-                    link = item.get("link", "") or ""
-                m = None
-                for part in link.replace("?", "/").split("/"):
-                    if part.isdigit() and len(part) >= 7:
-                        m = part
-                if m:
-                    ids.append(m)
-        # dedupe preserve order
-        seen = set(); res = []
-        for i in ids:
-            if i not in seen:
-                seen.add(i); res.append(i)
-        return res[:10]
+            OZON["fails"] += 1
+            log("  OZON status " + str(r.status_code) + " fails=" + str(OZON["fails"]))
+        else:
+            OZON["fails"] = 0
+            return r.json()
     except Exception as e:
-        print("  OZON search err: " + str(e))
+        OZON["fails"] += 1
+        log("  OZON err: " + str(e)[:60] + " fails=" + str(OZON["fails"]))
+    if OZON["fails"] >= 3:
+        OZON["enabled"] = False
+        log("  OZON disabled after repeated failures (blocked from CI)")
+    return None
+
+def ozon_search_ids(query):
+    data = ozon_get("/search/?text=" + query)
+    if not data:
         return []
+    ws = data.get("widgetStates", {})
+    ids = []
+    for k, v in ws.items():
+        if not k.startswith("tileGrid"):
+            continue
+        try:
+            tile = json.loads(v)
+        except Exception:
+            continue
+        for item in tile.get("items", []):
+            link = ""
+            act = item.get("action")
+            if isinstance(act, dict):
+                link = act.get("link", "")
+            if not link:
+                link = item.get("link", "") or ""
+            for part in link.replace("?", "/").split("/"):
+                if part.isdigit() and len(part) >= 7:
+                    ids.append(part)
+    seen = set(); res = []
+    for i in ids:
+        if i not in seen:
+            seen.add(i); res.append(i)
+    return res[:OZON_MAX_PRODUCTS]
 
 def ozon_product(pid):
-    url = "https://www.ozon.ru/api/composer-api.bx/page/json/v2?url=" + quote("/product/" + pid + "/", safe="")
-    try:
-        r = requests.get(url, timeout=25, headers=HEADERS_OZON)
-        if r.status_code != 200:
-            return None
-        ws = r.json().get("widgetStates", {})
-        name = ""; card = None; duty = 0
-        # name from webProductHeading
-        for k, v in ws.items():
-            if k.startswith("webProductHeading"):
-                try:
-                    name = json.loads(v).get("title", "")
-                except Exception:
-                    pass
-        for k, v in ws.items():
-            if k.startswith("webPrice"):
-                try:
-                    pj = json.loads(v)
-                    cp = pj.get("cardPrice") or pj.get("price") or ""
-                    digits = "".join(ch for ch in cp if ch.isdigit())
-                    if digits:
-                        card = int(digits)
-                except Exception:
-                    pass
-        for k, v in ws.items():
-            if k.startswith("webIconWithText") and "\u043f\u043e\u0448\u043b\u0438\u043d" in v:
-                try:
-                    obj = json.loads(v)
-                    txt = " ".join(t.get("content", "") for t in obj.get("textRs", []))
-                    digits = "".join(ch for ch in txt if ch.isdigit())
-                    if digits:
-                        duty = int(digits)
-                except Exception:
-                    pass
-        return {"name": name, "card": card, "duty": duty}
-    except Exception as e:
-        print("  OZON product err: " + str(e))
+    data = ozon_get("/product/" + pid + "/")
+    if not data:
         return None
+    ws = data.get("widgetStates", {})
+    name = ""; card = None; duty = 0
+    for k, v in ws.items():
+        if k.startswith("webProductHeading"):
+            try:
+                name = json.loads(v).get("title", "")
+            except Exception:
+                pass
+    for k, v in ws.items():
+        if k.startswith("webPrice"):
+            try:
+                pj = json.loads(v)
+                cp = pj.get("cardPrice") or pj.get("price") or ""
+                digits = "".join(ch for ch in cp if ch.isdigit())
+                if digits:
+                    card = int(digits)
+            except Exception:
+                pass
+    for k, v in ws.items():
+        if k.startswith("webIconWithText") and "\u043f\u043e\u0448\u043b\u0438\u043d" in v:
+            try:
+                obj = json.loads(v)
+                txt = " ".join(t.get("content", "") for t in obj.get("textRs", []))
+                digits = "".join(ch for ch in txt if ch.isdigit())
+                if digits:
+                    duty = int(digits)
+            except Exception:
+                pass
+    return {"name": name, "card": card, "duty": duty}
 
 def ozon_scan(model, cfg):
     out = []
+    if not OZON["enabled"]:
+        return out
     for pid in ozon_search_ids(model["query"]):
+        if not OZON["enabled"]:
+            break
         info = ozon_product(pid)
         if not info or info.get("card") is None:
             continue
         name = info["name"]
-        ok, why = passes_filters(name, model)
-        if not ok:
+        if not passes_filters(name, model):
             continue
         if info["card"] < model.get("min_price", 0):
             continue
         out.append({
-            "market": "Ozon",
-            "name": name,
+            "market": "Ozon", "name": name,
             "url": "https://www.ozon.ru/product/" + pid + "/",
             "base": info["card"], "card": info["card"], "duty": info["duty"],
             "duty_est": False, "total": info["card"] + info["duty"],
         })
-        time.sleep(random.uniform(0.5, 1.2))
+        time.sleep(random.uniform(0.3, 0.8))
     return out
 
 
@@ -276,9 +286,9 @@ def send_telegram(message):
             "parse_mode": "HTML",
             "disable_web_page_preview": "true",
         }, timeout=15)
-        print("TG status " + str(r.status_code))
+        log("TG status " + str(r.status_code))
     except Exception as e:
-        print("TG err: " + str(e))
+        log("TG err: " + str(e))
 
 def main():
     with open(PRODUCTS_FILE, encoding="utf-8") as f:
@@ -286,12 +296,12 @@ def main():
     cfg = conf.get("config", {})
     models = conf.get("models", [])
 
-    lines = ["\U0001f9ea <b>\u0422\u0415\u0421\u0422 \u0442\u0440\u0435\u043a\u0435\u0440\u0430</b> \u2014 \u043b\u0443\u0447\u0448\u0438\u0435 \u0446\u0435\u043d\u044b (WB + Ozon)", ""]
+    lines = ["\U0001f9ea <b>\u0422\u0415\u0421\u0422 \u0442\u0440\u0435\u043a\u0435\u0440\u0430</b> \u2014 \u043b\u0443\u0447\u0448\u0438\u0435 \u0446\u0435\u043d\u044b", ""]
     total_found = 0
 
     for model in models:
-        offers = []
-        offers += wb_scan(model, cfg)
+        log("=== " + model["label"] + " ===")
+        offers = wb_scan(model, cfg)
         offers += ozon_scan(model, cfg)
         total_found += len(offers)
         target = model.get("target", 0)
@@ -306,15 +316,15 @@ def main():
         duty_note = ""
         if best["duty"]:
             sign = "\u2248" if best["duty_est"] else "+"
-            duty_note = " (\u0446\u0435\u043d\u0430 " + fmt(best["card"]) + " " + sign + " \u043f\u043e\u0448\u043b\u0438\u043d\u0430 " + fmt(best["duty"]) + ")"
+            duty_note = " (" + fmt(best["card"]) + " " + sign + " \u043f\u043e\u0448\u043b\u0438\u043d\u0430 " + fmt(best["duty"]) + ")"
         lines.append("  " + hit + " " + best["market"] + ": <b>" + fmt(best["total"]) + " \u20bd</b>" + duty_note)
-        lines.append("  <a href=\"" + best["url"] + "\">\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0442\u043e\u0432\u0430\u0440</a>")
+        lines.append("  <a href=\"" + best["url"] + "\">\u041e\u0442\u043a\u0440\u044b\u0442\u044c</a>")
         lines.append("")
 
-    lines.append("\u0412\u0441\u0435\u0433\u043e \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0439: " + str(total_found))
+    src = "WB + Ozon" if OZON["enabled"] else "\u0442\u043e\u043b\u044c\u043a\u043e WB (Ozon \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d)"
+    lines.append("\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438: " + src + ". \u041d\u0430\u0439\u0434\u0435\u043d\u043e: " + str(total_found))
     msg = "\n".join(lines)
-    print("Found total: " + str(total_found))
-    # Telegram message limit ~4096 chars; chunk if needed
+    log("Found total: " + str(total_found) + " | ozon_enabled=" + str(OZON["enabled"]))
     if len(msg) > 3900:
         chunk = ""
         for ln in lines:
